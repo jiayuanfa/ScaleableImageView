@@ -9,13 +9,31 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.widget.OverScroller;
 
 import androidx.annotation.Nullable;
 import androidx.core.view.GestureDetectorCompat;
 
-public class ScalableImageView extends View implements GestureDetector.OnGestureListener, GestureDetector.OnDoubleTapListener, Runnable {
+public class ScalableImageView extends View {
+
+    /**
+     * 把方法实现都提取出来
+     */
+    /**
+     * 手势监听
+     */
+    GestureDetectorCompat gestureDetectorCompat;
+    GestureDetector.OnGestureListener fageGestureListener = new FageGestureListerner();
+    Runnable fageRunner = new FageRunner();
+
+    /**
+     * 双指放缩功能
+     */
+    ScaleGestureDetector scaleGestureDetector;
+    ScaleGestureDetector.OnScaleGestureListener fageScaleGestureListener = new FageScaleGestureListener();
+
     private static final float IMAGE_WIDTH = Utils.dpToPixel(300);
     /**
      * 放缩系数
@@ -59,22 +77,17 @@ public class ScalableImageView extends View implements GestureDetector.OnGesture
     float scaleFraction;
     ObjectAnimator scaleObjectAnimator;
 
-    /**
-     * 手势监听
-     */
-    GestureDetectorCompat gestureDetectorCompat;
-
     public ScalableImageView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
 
         bitmap = Utils.getAvatar(getResources(), (int) IMAGE_WIDTH);
         /**
          * 初始化手势 并设置双击回调
+         * 双指缩放等
          */
-        gestureDetectorCompat = new GestureDetectorCompat(context, this);
-        gestureDetectorCompat.setOnDoubleTapListener(this);
-
+        gestureDetectorCompat = new GestureDetectorCompat(context, fageGestureListener);
         overScroller = new OverScroller(context);
+        scaleGestureDetector = new ScaleGestureDetector(context, fageScaleGestureListener);
     }
 
     /**
@@ -126,7 +139,7 @@ public class ScalableImageView extends View implements GestureDetector.OnGesture
         /**
          * Scale变化过程，使用动画完成度进行计算，使之呈现绘制动画的顺滑变大的动画效果
          */
-        canvas.translate(offsetX, offsetY);
+        canvas.translate(offsetX * scaleFraction, offsetY * scaleFraction);
         float scale = smallScale + (bigScale - smallScale) * scaleFraction;
         canvas.scale(scale, scale, getWidth() / 2f, getHeight() / 2f);
         canvas.drawBitmap(bitmap, originOffsetX, originOffsetY, paint);
@@ -143,109 +156,151 @@ public class ScalableImageView extends View implements GestureDetector.OnGesture
     }
 
     /**
-     * Return true 使之响应点击回调
-     * @param e
-     * @return
+     * 处理放大或者滑动之后的边界问题
+     * 也就是若方法或者滑动之后边界超出屏幕，则撑满屏幕即可
      */
-    @Override
-    public boolean onDown(MotionEvent e) {
-        return true;
-    }
-
-    @Override
-    public void onShowPress(MotionEvent e) {
-
-    }
-
-    @Override
-    public boolean onSingleTapUp(MotionEvent e) {
-        return false;
+    private void fixOffset() {
+        /**
+         * 左右滑动，不能超过图片边界
+         */
+        offsetX = Math.max(offsetX, -maxOffsetX);
+        offsetX = Math.min(offsetX, maxOffsetX);
+        /**
+         * 上下滑动不能超过图片边界
+         */
+        offsetY = Math.max(offsetY, -maxOffsetY);
+        offsetY = Math.min(offsetY, maxOffsetY);
     }
 
     /**
-     * 手指跟随滚动
-     * @param e1
-     * @param e2
-     * @param distanceX
-     * @param distanceY
-     * @return
+     * 手势内部实现类
      */
-    @Override
-    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-        if (big) {
-            offsetX -= distanceX;
-            /**
-             * 左右滑动，不能超过图片边界
-             */
-            offsetX = Math.max(offsetX, -maxOffsetX);
-            offsetX = Math.min(offsetX, maxOffsetX);
-            offsetY -= distanceY;
-            /**
-             * 上下滑动不能超过图片边界
-             */
-            offsetY = Math.max(offsetY, -maxOffsetY);
-            offsetY = Math.min(offsetY, maxOffsetY);
-            invalidate();
+    private class FageGestureListerner extends GestureDetector.SimpleOnGestureListener {
+        /**
+         * Return true 使之响应点击回调
+         * @param e
+         * @return
+         */
+        @Override
+        public boolean onDown(MotionEvent e) {
+            return true;
         }
-        return false;
-    }
 
-    @Override
-    public void onLongPress(MotionEvent e) {
+        @Override
+        public void onShowPress(MotionEvent e) {
 
+        }
+
+        @Override
+        public boolean onSingleTapUp(MotionEvent e) {
+            return false;
+        }
+
+        /**
+         * 手指跟随滚动
+         * @param e1
+         * @param e2
+         * @param distanceX
+         * @param distanceY
+         * @return
+         */
+        @Override
+        public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+            if (big) {
+                offsetX -= distanceX;
+                offsetY -= distanceY;
+                fixOffset();
+                invalidate();
+            }
+            return false;
+        }
+
+        @Override
+        public void onLongPress(MotionEvent e) {
+
+        }
+
+        /**
+         * 惯性滑动代码
+         * @param e1
+         * @param e2
+         * @param velocityX
+         * @param velocityY
+         * @return
+         */
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            if (big) {
+                /**
+                 * 最后两个参数是回弹效果
+                 */
+                overScroller.fling((int)offsetX, (int)offsetY, (int)velocityX, (int)velocityY,
+                        -(int)maxOffsetX, (int)maxOffsetX, -(int)maxOffsetY, (int)maxOffsetY,
+                        (int)Utils.dpToPixel(50), (int)Utils.dpToPixel(50));
+                postOnAnimation(fageRunner);
+            }
+            return false;
+        }
+
+        @Override
+        public boolean onSingleTapConfirmed(MotionEvent e) {
+            return false;
+        }
+
+        @Override
+        public boolean onDoubleTap(MotionEvent e) {
+            big = !big;
+            if (big) {
+                // 放大的时候，减去偏移量，以保证触摸放大的时候，触摸点不偏移
+                offsetX = (e.getX() - getWidth() / 2f) * (1 - bigScale / smallScale);
+                offsetY = (e.getY() - getHeight() / 2f) * (1 - bigScale / smallScale);
+                fixOffset();
+                getScaleAnimator().start();
+            } else {
+                getScaleAnimator().reverse();
+            }
+            Log.d("gesture", "double click");
+            return false;
+        }
+
+        @Override
+        public boolean onDoubleTapEvent(MotionEvent e) {
+            return false;
+        }
     }
 
     /**
-     * 惯性滑动代码
-     * @param e1
-     * @param e2
-     * @param velocityX
-     * @param velocityY
-     * @return
+     * 动画Runnable
      */
-    @Override
-    public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-        if (big) {
-            /**
-             * 最后两个参数是回弹效果
-             */
-            overScroller.fling((int)offsetX, (int)offsetY, (int)velocityX, (int)velocityY,
-                    -(int)maxOffsetX, (int)maxOffsetX, -(int)maxOffsetY, (int)maxOffsetY,
-                    (int)Utils.dpToPixel(50), (int)Utils.dpToPixel(50));
-            postOnAnimation(this);
-        }
-        return false;
-    }
-
-    @Override
-    public void run() {
-        if (overScroller.computeScrollOffset()) {
-            offsetX = overScroller.getCurrX();
-            offsetY = overScroller.getCurrY();
-            invalidate();
-            postOnAnimation(this);
+    private class FageRunner implements Runnable {
+        @Override
+        public void run() {
+            if (overScroller.computeScrollOffset()) {
+                offsetX = overScroller.getCurrX();
+                offsetY = overScroller.getCurrY();
+                invalidate();
+                postOnAnimation(this);
+            }
         }
     }
 
-    @Override
-    public boolean onSingleTapConfirmed(MotionEvent e) {
-        return false;
-    }
-
-    @Override
-    public boolean onDoubleTap(MotionEvent e) {
-        big = !big;
-        if (big) {
-            getScaleAnimator().start();
-        } else {
-            getScaleAnimator().reverse();
+    /**
+     * 放缩功能类
+     */
+    private class FageScaleGestureListener implements ScaleGestureDetector.OnScaleGestureListener {
+        @Override
+        public boolean onScale(ScaleGestureDetector detector) {
+            return false;
         }
-        Log.d("gesture", "double click");
-        return false;
-    }
 
-    @Override
-    public boolean onDoubleTapEvent(MotionEvent e) {
-        return false;
+        @Override
+        public boolean onScaleBegin(ScaleGestureDetector detector) {
+            return false;
+        }
+
+        @Override
+        public void onScaleEnd(ScaleGestureDetector detector) {
+
+        }
     }
 }
