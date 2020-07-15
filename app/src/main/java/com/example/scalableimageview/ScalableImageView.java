@@ -62,19 +62,20 @@ public class ScalableImageView extends View {
      */
     boolean big = false;
 
-    public float getScaleFraction() {
-        return scaleFraction;
+    public float getCurrentScale() {
+        return currentScale;
     }
 
-    public void setScaleFraction(float scaleFraction) {
-        this.scaleFraction = scaleFraction;
+    public void setCurrentScale(float scaleFraction) {
+        this.currentScale = scaleFraction;
         invalidate();
     }
 
     /**
      * 动画 以及动画完成度
      */
-    float scaleFraction;
+//    float scaleFraction;
+    float currentScale;
     ObjectAnimator scaleObjectAnimator;
 
     public ScalableImageView(Context context, @Nullable AttributeSet attrs) {
@@ -96,8 +97,9 @@ public class ScalableImageView extends View {
      */
     private ObjectAnimator getScaleAnimator() {
         if (scaleObjectAnimator == null) {
-            scaleObjectAnimator = ObjectAnimator.ofFloat(this, "scaleFraction", 0, 1);
+            scaleObjectAnimator = ObjectAnimator.ofFloat(this, "currentScale", 0);
         }
+        scaleObjectAnimator.setFloatValues(smallScale, bigScale);
         return scaleObjectAnimator;
     }
 
@@ -126,7 +128,7 @@ public class ScalableImageView extends View {
             smallScale = (float) getHeight() / bitmap.getHeight();
             bigScale = (float) getWidth() / bitmap.getWidth() * OVER_SCALE_FACTOR;
         }
-
+        currentScale = smallScale;
         maxOffsetX = (bitmap.getWidth() * bigScale - getWidth()) / 2;
         maxOffsetY = (bitmap.getHeight() * bigScale - getHeight()) / 2;
     }
@@ -139,9 +141,9 @@ public class ScalableImageView extends View {
         /**
          * Scale变化过程，使用动画完成度进行计算，使之呈现绘制动画的顺滑变大的动画效果
          */
+        float scaleFraction = (currentScale - smallScale) / (bigScale - smallScale);
         canvas.translate(offsetX * scaleFraction, offsetY * scaleFraction);
-        float scale = smallScale + (bigScale - smallScale) * scaleFraction;
-        canvas.scale(scale, scale, getWidth() / 2f, getHeight() / 2f);
+        canvas.scale(currentScale, currentScale, getWidth() / 2f, getHeight() / 2f);
         canvas.drawBitmap(bitmap, originOffsetX, originOffsetY, paint);
     }
 
@@ -152,7 +154,7 @@ public class ScalableImageView extends View {
      */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        return gestureDetectorCompat.onTouchEvent(event);
+        return scaleGestureDetector.onTouchEvent(event);
     }
 
     /**
@@ -288,14 +290,22 @@ public class ScalableImageView extends View {
      * 放缩功能类
      */
     private class FageScaleGestureListener implements ScaleGestureDetector.OnScaleGestureListener {
+
+        private float initialCurrentScale;
+
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
+            // 每次放缩开始 初始值乘以放缩比例
+            currentScale = initialCurrentScale * detector.getScaleFactor();
+            invalidate();
             return false;
         }
 
         @Override
         public boolean onScaleBegin(ScaleGestureDetector detector) {
-            return false;
+            // 设置放缩初始值
+            initialCurrentScale = currentScale;
+            return true;
         }
 
         @Override
