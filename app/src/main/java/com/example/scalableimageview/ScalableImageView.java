@@ -154,7 +154,14 @@ public class ScalableImageView extends View {
      */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        return scaleGestureDetector.onTouchEvent(event);
+        boolean result = scaleGestureDetector.onTouchEvent(event);
+        /**
+         * 如果不是在捏撑，则双指点击
+         */
+        if (!scaleGestureDetector.isInProgress()) {
+            result = gestureDetectorCompat.onTouchEvent(event);
+        }
+        return result;
     }
 
     /**
@@ -297,6 +304,7 @@ public class ScalableImageView extends View {
         public boolean onScale(ScaleGestureDetector detector) {
             // 每次放缩开始 初始值乘以放缩比例
             currentScale = initialCurrentScale * detector.getScaleFactor();
+            big = true;
             invalidate();
             return false;
         }
