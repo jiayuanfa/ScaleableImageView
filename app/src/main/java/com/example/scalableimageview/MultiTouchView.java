@@ -17,6 +17,10 @@ public class MultiTouchView extends View {
     Bitmap bitmap;
     private float offsetX;
     private float offsetY;
+    private float downX;
+    private float downY;
+    private float originalX;
+    private float originalY;
 
     public MultiTouchView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -26,13 +30,20 @@ public class MultiTouchView extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
-
+            // 记录手指按下位置
+            // 更新图片偏移量
+            case MotionEvent.ACTION_DOWN:
+                downX = event.getX();
+                downY = event.getY();
+                originalX = offsetX;
+                originalY = offsetY;
+                break;
             /**
              * 图形跟随手指移动的方法
              */
             case MotionEvent.ACTION_MOVE:
-                offsetX = event.getX();
-                offsetY = event.getY();
+                offsetX = event.getX() - downX + originalX;
+                offsetY = event.getY() - downY + originalY;
                 invalidate();
                 break;
         }
